@@ -1,0 +1,109 @@
+<?php
+
+/**
+ * @file
+ * Drupal REST web services module.
+ */
+
+/**
+ * Implements hook_menu_alter().
+ * Redirect all node/% requests to custom callback.
+ */
+
+function drupal_rest_menu_alter(&$items) {
+  $items['node/%node']['page callback'] = 'resource_json';
+  $items['node/%node/view']['page callback'] = 'resource_json';
+}
+
+/**
+ * REST callback, which will handle all operations on the Resource.
+ */
+function resource_json($resource,$consumer_name='',$payload='{"resource":"","operation":"","newvalue":""}') {
+
+  $consumer_key_indb = variable_get('consumer-' . $consumer_name);
+  // Get the request token from user.
+  $consumer_token=$_SERVER['HTTP_AUTHORIZATION'];
+
+  if (empty($consumer_name) || empty($consumer_token)) {
+    drupal_rest_terminate_request('Please provide a valid consumer name and access token.');
+  }
+
+  switch ($_SERVER['REQUEST_METHOD']) {
+    case 'GET':
+      if ($resource->type == 'page' && $consumer_key_indb == $consumer_token) {
+          $json = json_encode($resource);
+          drupal_add_http_header('Content-Type', 'application/json');
+          print $json;
+      }
+      elseif ($resource->type != 'page') {
+        drupal_rest_terminate_request('You do not have authorization to request this resource.');
+      }
+      elseif ($consumer_key_indb != $consumer_token) {
+        drupal_rest_terminate_request('The Token you have provided is either invalid or expired.');
+      }
+      elseif (!drupal_is_front_page()) {
+        drupal_rest_terminate_request('Requested resource is not available');
+      }
+      else {
+        drupal_rest_terminate_request('Invalid Request');
+      }
+      break;
+    case 'POST':
+      $to_update_data=json_decode($payload);
+      if ($resource->type == 'page' && $consumer_key_indb == $consumer_token) {
+        $json = json_encode(array("msg" => "Successfully updated resource."));
+        drupal_add_http_header('Content-Type', 'application/json');
+        print $json;
+      }
+      elseif (!drupal_is_front_page()) {
+        drupal_rest_terminate_request('Your request is invalid');
+      }
+      break;
+    case 'DELETE':
+      $to_delete_data=json_decode($payload);
+      if ($resource->type == 'page' && $consumer_key_indb == $consumer_token) {
+        $json = json_encode(array("msg" => "Successfully deleted resource."));
+        drupal_add_http_header('Content-Type', 'application/json');
+        print $json;
+      }
+      elseif (!drupal_is_front_page()) {
+        drupal_rest_terminate_request('Your request is invalid');
+      }
+      break;
+    default:
+      break;
+
+  }
+
+}
+
+/*
+ * Implements hook_menu()
+ * Form to set Access keys per customer.
+ */
+
+function drupal_rest_menu() {
+
+  $items['drupal_rest/access/settings'] = array(
+    'title' => 'Configure 3rd Party Sources and Keys',
+    'description' => 'Add resource access list.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('drupal_rest_config'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'drupal_rest_access_settings_form.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Terminates the current request with the given status code and message.
+ *
+ */
+function drupal_rest_terminate_request($status_message = NULL) {
+  drupal_add_http_header('Content-Type', 'application/json');
+  $json = json_encode(array("error" => $status_message));
+  print $json;
+  exit;
+}

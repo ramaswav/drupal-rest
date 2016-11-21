@@ -1,0 +1,5 @@
+name = Drupal Rest
+description =Exposes Node resource of type Page as JSON. Requires a Security Token.
+package = CUSTOM
+version = VERSION
+core = 7.x
